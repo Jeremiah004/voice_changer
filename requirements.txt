@@ -1,0 +1,5 @@
+flask
+soundfile
+ffmpeg
+librosa
+pydub
