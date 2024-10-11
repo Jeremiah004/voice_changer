@@ -1,1 +1,1 @@
-web: gunicorn app:voice_change.py
+web: gunicorn voice_change:app
