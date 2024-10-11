@@ -3,6 +3,8 @@ import librosa
 import soundfile as sf
 import io
 from pydub import AudioSegment
+import os
+
 
 
 app = Flask(__name__)
@@ -80,10 +82,10 @@ def process_audio():
 
         # Define the pitch and tempo based on the option
         options_map = {
-            'high_pitch_low_tempo': (4, 0.7),  # High pitch, low tempo
-            'high_pitch_high_tempo': (4, 1.5),  # High pitch, high tempo
-            'low_pitch_low_tempo': (-4, 0.7),  # Low pitch, low tempo
-            'low_pitch_high_tempo': (-4, 1.5)  # Low pitch, high tempo
+            'high_pitch_low_tempo': (4, 0.7),  
+            'high_pitch_high_tempo': (4, 1.5), 
+            'low_pitch_low_tempo': (-4, 0.7),  
+            'low_pitch_high_tempo': (-4, 1.5)  
         }
 
         # Get the pitch and tempo factors based on the user's selected option
@@ -109,4 +111,5 @@ def process_audio():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
