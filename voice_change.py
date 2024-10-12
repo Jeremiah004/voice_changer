@@ -21,7 +21,7 @@ def voice_changer(input_data, pitch_factor=1.25, tempo_factor=1.15):
     """
     try:
         # Load audio from the in-memory WAV file
-        audio, sr = librosa.load(io.BytesIO(input_data), sr=None)
+        audio, sr = librosa.load(io.BytesIO(input_data), sr=16000)
 
         # Apply pitch shift
         audio_pitch_shifted = librosa.effects.pitch_shift(audio, sr=sr, n_steps=int(pitch_factor), bins_per_octave=24)
