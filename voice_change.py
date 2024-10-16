@@ -4,6 +4,7 @@ import soundfile as sf
 import io
 from pydub import AudioSegment
 import os
+import logging
 
 
 
@@ -58,6 +59,10 @@ def change_wav_mp3(input_file):
         return None
 
 
+
+@app.route("/health", methods=["GET"])
+def health():
+    return "App is running"
 @app.route('/process-audio', methods=['POST'])
 def process_audio():
     """
@@ -108,8 +113,12 @@ def process_audio():
 
     except Exception as e:
         return jsonify({"error": f"An error occurred: {e}"}), 500
+    
 
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
+    logging.basicConfig(level=logging.DEBUG)
+
+
