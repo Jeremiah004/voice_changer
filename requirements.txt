@@ -1,6 +1,6 @@
-flask
-soundfile
-ffmpeg
+fastapi
+uvicorn
 librosa
+soundfile
 pydub
 gunicorn
