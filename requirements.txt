@@ -4,3 +4,4 @@ librosa
 soundfile
 pydub
 gunicorn
+python-multipart
