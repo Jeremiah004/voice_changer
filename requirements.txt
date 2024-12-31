@@ -2,6 +2,6 @@ fastapi
 uvicorn
 librosa
 soundfile
-
+pydub
 python-multipart
 cloudinary
