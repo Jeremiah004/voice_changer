@@ -18,8 +18,8 @@ cloudinary.config(cloud_name="duowocved", api_key="516984976233131", api_secret=
 # Audio processing configurations
 SAMPLE_RATE = 22050  # Increased sample rate for better performance
 AUDIO_OPTIONS = {
-    'high_pitch': 4,
-    'low_pitch': -4,
+    '1': 4,
+    '0': -4,
     'random': lambda: random.uniform(-6, 6)
 }
 
