@@ -5,3 +5,4 @@ soundfile
 pydub
 gunicorn
 python-multipart
+cloudinary
