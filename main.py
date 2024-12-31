@@ -4,105 +4,115 @@ import librosa
 import soundfile as sf
 import io
 from pydub import AudioSegment
-import cloudinary
 import cloudinary.uploader
 import tempfile
 import os
 
+# Initialize FastAPI
 app = FastAPI()
 
-# Configure Cloudinary
-cloudinary.config(
-    cloud_name="duowocved",
-    api_key="516984976233131",
-    api_secret="XgBdT78yTR2A56srD1Fzf1tqEyo"
-)
+# Cloudinary configuration
+cloudinary.config(cloud_name="duowocved", api_key="516984976233131", api_secret="XgBdT78yTR2A56srD1Fzf1tqEyo")
 
-def voice_changer(input_data, pitch_factor=1.25, tempo_factor=1.15):
+# Audio processing configurations
+SAMPLE_RATE = 16000
+AUDIO_OPTIONS = {
+    'high_pitch_low_tempo': (4, 0.02),
+    'high_pitch_high_tempo': (4, 1.1),
+    'low_pitch_low_tempo': (-4, 0.02),
+    'low_pitch_high_tempo': (-4, 1.1)
+}
+
+def process_audio_data(audio_data, pitch_steps, tempo_rate):
+    """Process audio with given pitch and tempo modifications."""
     try:
-        audio, sr = librosa.load(io.BytesIO(input_data), sr=16000)
-        audio_pitch_shifted = librosa.effects.pitch_shift(audio, sr=sr, n_steps=int(pitch_factor), bins_per_octave=24)
-        audio_time_stretched = librosa.effects.time_stretch(audio_pitch_shifted, rate=tempo_factor)
+        audio, sr = librosa.load(io.BytesIO(audio_data), sr=SAMPLE_RATE)
+        audio = librosa.effects.pitch_shift(audio, sr=sr, n_steps=pitch_steps, bins_per_octave=24)
+        audio = librosa.effects.time_stretch(audio, rate=tempo_rate)
         
-        output_buffer = io.BytesIO()
-        sf.write(output_buffer, audio_time_stretched, sr, format='WAV')
-        output_buffer.seek(0)
-        return output_buffer
+        buffer = io.BytesIO()
+        sf.write(buffer, audio, sr, format='WAV')
+        buffer.seek(0)
+        return buffer
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Audio processing error: {e}")
         return None
 
-def convert_to_mp3(input_file, input_format):
+def convert_audio_format(audio_data, input_format, output_format='mp3'):
+    """Convert audio between formats using pydub."""
     try:
-        audio = AudioSegment.from_file(io.BytesIO(input_file), format=input_format)
-        mp3_buffer = io.BytesIO()
-        audio.export(mp3_buffer, format="mp3")
-        mp3_buffer.seek(0)
-        return mp3_buffer
+        audio = AudioSegment.from_file(io.BytesIO(audio_data), format=input_format)
+        buffer = io.BytesIO()
+        audio.export(buffer, format=output_format)
+        buffer.seek(0)
+        return buffer
     except Exception as e:
-        print(f"Conversion error: {e}")
+        print(f"Format conversion error: {e}")
         return None
 
-@app.post("/process-audio")
-async def process_audio(
-    file: UploadFile = File(...),
-    option: str = Form('high_pitch_low_tempo')
-):
+async def upload_to_cloudinary(audio_data):
+    """Upload audio to Cloudinary and return response."""
     try:
-        # Read file content
-        content = await file.read()
-        
-        # Determine input format from filename
-        input_format = file.filename.split('.')[-1].lower()
-        
-        # Map options
-        options_map = {
-            'high_pitch_low_tempo': (4, 0.02),
-            'high_pitch_high_tempo': (4, 1.1),
-            'low_pitch_low_tempo': (-4, 0.02),
-            'low_pitch_high_tempo': (-4, 1.1)
-        }
-        pitch_factor, tempo_factor = options_map.get(option, (4, 0.02))
-
-        # Convert to WAV for processing if needed
-        if input_format != 'wav':
-            wav_buffer = convert_to_mp3(content, input_format)
-            if wav_buffer is None:
-                return JSONResponse(status_code=500, content={"error": "Audio conversion failed"})
-            content = wav_buffer.read()
-
-        # Modify voice
-        modified_audio = voice_changer(content, pitch_factor, tempo_factor)
-        if modified_audio is None:
-            return JSONResponse(status_code=500, content={"error": "Voice modification failed"})
-
-        # Convert to MP3
-        mp3_audio = convert_to_mp3(modified_audio.read(), 'wav')
-        if mp3_audio is None:
-            return JSONResponse(status_code=500, content={"error": "Final conversion failed"})
-
-        # Save to temporary file for Cloudinary upload
         with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as tmp:
-            tmp.write(mp3_audio.read())
+            tmp.write(audio_data)
             tmp_path = tmp.name
 
-        # Upload to Cloudinary
         result = cloudinary.uploader.upload(
             tmp_path,
             resource_type="auto",
             folder="audio_processing"
         )
-
-        # Clean up temp file
         os.unlink(tmp_path)
-
-        # Return Cloudinary details
+        
         return {
             "url": result["secure_url"],
             "public_id": result["public_id"],
             "format": result["format"],
             "resource_type": result["resource_type"]
         }
+    except Exception as e:
+        print(f"Upload error: {e}")
+        return None
+
+@app.post("/process-audio")
+async def process_audio(file: UploadFile = File(...), option: str = Form('high_pitch_low_tempo')):
+    """Process audio file with specified modifications and upload to Cloudinary."""
+    try:
+        # Get audio processing parameters
+        if option not in AUDIO_OPTIONS:
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"Invalid option. Choose from: {', '.join(AUDIO_OPTIONS.keys())}"}
+            )
+        
+        pitch_factor, tempo_factor = AUDIO_OPTIONS[option]
+        
+        # Read and process file
+        content = await file.read()
+        input_format = file.filename.split('.')[-1].lower()
+        
+        # Convert to WAV if needed
+        if input_format != 'wav':
+            content = convert_audio_format(content, input_format, 'wav').read()
+            if not content:
+                return JSONResponse(status_code=500, content={"error": "Audio conversion failed"})
+        
+        # Process audio
+        modified_audio = process_audio_data(content, pitch_factor, tempo_factor)
+        if not modified_audio:
+            return JSONResponse(status_code=500, content={"error": "Voice modification failed"})
+        
+        # Convert to MP3
+        mp3_audio = convert_audio_format(modified_audio.read(), 'wav', 'mp3')
+        if not mp3_audio:
+            return JSONResponse(status_code=500, content={"error": "Final conversion failed"})
+        
+        # Upload and return results
+        result = await upload_to_cloudinary(mp3_audio.read())
+        if not result:
+            return JSONResponse(status_code=500, content={"error": "Upload to Cloudinary failed"})
+        
+        return result
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
