@@ -1,5 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 import librosa
 import soundfile as sf
 import io
@@ -11,6 +12,23 @@ import random
 
 # Initialize FastAPI
 app = FastAPI()
+
+# Define allowed origins
+origins = [
+    "http://localhost:5173",
+    "https://stealth-frontend.onrender.com",
+    "https://stealth-backend-kj78.onrender.com",
+    "https://voice-changer-3.onrender.com"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"]  # Added to ensure all response headers are accessible
+)
 
 # Cloudinary configuration
 cloudinary.config(cloud_name="duowocved", api_key="516984976233131", api_secret="XgBdT78yTR2A56srD1Fzf1tqEyo")
