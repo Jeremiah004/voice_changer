@@ -113,7 +113,7 @@ async def upload_to_cloudinary(audio_data):
         return None
 
 @app.post("/process-audio")
-async def process_audio(file: UploadFile = File(...), option: str = Form('high_pitch')):
+async def process_audio(file: UploadFile = File(...), option: str = Form('1')):
     """Process audio file with specified pitch modifications."""
     try:
         # Validate option
