@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, Form
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import librosa
@@ -43,6 +43,9 @@ AUDIO_OPTIONS = {
 
 def process_audio_data(audio_data, pitch_steps):
     """Process audio with optimized pitch modifications."""
+    if not audio_data:
+        raise ValueError("No audio data provided")
+        
     try:
         # Load audio with reduced duration for testing
         audio, sr = librosa.load(io.BytesIO(audio_data), sr=SAMPLE_RATE, duration=None)
@@ -55,7 +58,7 @@ def process_audio_data(audio_data, pitch_steps):
             audio, 
             sr=sr, 
             n_steps=pitch_steps, 
-            bins_per_octave=12  # Reduced for better performance
+            bins_per_octave=12
         )
         
         # Write to buffer with optimized settings
@@ -64,53 +67,57 @@ def process_audio_data(audio_data, pitch_steps):
         buffer.seek(0)
         return buffer
     except Exception as e:
-        print(f"Audio processing error: {e}")
-        return None
+        raise ValueError(f"Audio processing failed: {str(e)}")
 
 def convert_audio_format(audio_data, input_format, output_format='mp3'):
     """Convert audio between formats with optimized settings."""
+    if not audio_data:
+        raise ValueError("No audio data provided")
+        
     try:
         audio = AudioSegment.from_file(io.BytesIO(audio_data), format=input_format)
         
-        # Optimize conversion settings
         buffer = io.BytesIO()
         export_params = {
             'format': output_format,
-            'bitrate': '128k',  # Reduced bitrate for faster processing
-            'parameters': ['-ac', '1']  # Convert to mono for smaller file size
+            'bitrate': '128k',
+            'parameters': ['-ac', '1']
         }
         audio.export(buffer, **export_params)
         buffer.seek(0)
         return buffer
     except Exception as e:
-        print(f"Format conversion error: {e}")
-        return None
+        raise ValueError(f"Format conversion failed: {str(e)}")
 
 async def upload_to_cloudinary(audio_data):
     """Upload audio to Cloudinary with optimized settings."""
+    if not audio_data:
+        raise ValueError("No audio data provided")
+        
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as tmp:
             tmp.write(audio_data)
             tmp_path = tmp.name
 
-        # Optimize upload settings
         result = cloudinary.uploader.upload(
             tmp_path,
             resource_type="auto",
             folder="audio_processing",
-            quality="auto:low",  # Optimize for performance
+            quality="auto:low",
             fetch_format="auto"
         )
         os.unlink(tmp_path)
         
+        if not result or 'secure_url' not in result:
+            raise ValueError("Cloudinary upload failed")
+            
         return {
             "url": result["secure_url"],
             "public_id": result["public_id"],
             "format": result["format"]
         }
     except Exception as e:
-        print(f"Upload error: {e}")
-        return None
+        raise ValueError(f"Upload failed: {str(e)}")
 
 @app.post("/process-audio")
 async def process_audio(file: UploadFile = File(...), option: str = Form('1')):
@@ -118,39 +125,36 @@ async def process_audio(file: UploadFile = File(...), option: str = Form('1')):
     try:
         # Validate option
         if option not in AUDIO_OPTIONS:
-            return JSONResponse(
+            raise HTTPException(
                 status_code=400,
-                content={"error": f"Invalid option. Choose from: {', '.join(AUDIO_OPTIONS.keys())}"}
+                detail=f"Invalid option. Choose from: {', '.join(AUDIO_OPTIONS.keys())}"
             )
         
         pitch_factor = AUDIO_OPTIONS[option]
         
         # Read file content
         content = await file.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="Empty file provided")
+            
         input_format = file.filename.split('.')[-1].lower()
         
         # Convert to WAV if needed
         if input_format != 'wav':
-            content = convert_audio_format(content, input_format, 'wav').read()
-            if not content:
-                return JSONResponse(status_code=500, content={"error": "Audio conversion failed"})
+            wav_buffer = convert_audio_format(content, input_format, 'wav')
+            content = wav_buffer.read()
         
         # Process audio
         modified_audio = process_audio_data(content, pitch_factor)
-        if not modified_audio:
-            return JSONResponse(status_code=500, content={"error": "Voice modification failed"})
         
         # Convert to MP3
         mp3_audio = convert_audio_format(modified_audio.read(), 'wav', 'mp3')
-        if not mp3_audio:
-            return JSONResponse(status_code=500, content={"error": "Final conversion failed"})
         
         # Upload and return results
         result = await upload_to_cloudinary(mp3_audio.read())
-        if not result:
-            return JSONResponse(status_code=500, content={"error": "Upload to Cloudinary failed"})
-        
         return result
 
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        return JSONResponse(status_code=500, content={"error": f"Processing failed: {str(e)}"})
